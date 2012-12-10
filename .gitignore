@@ -4,3 +4,4 @@ cert
 specs.py
 Resources/spec*
 Resources/vendor/jasmine-titanium*
+Makefile
