@@ -1,221 +1,326 @@
 /*jslint bitwise: true */
-/*global window, exports */
-
-/**
- * JavaScript GeoHash Library
- * ---------
- * Original: python-geohash (http://code.google.com/p/python-geohash/)
- *         : Copyright (C) 2009 Hiroaki Kawai <kawai@iij.ad.jp>
- * Base JS : js-geohash (https://github.com/y-matsuwitter/js-geohash)
- * ---------
- * License : MIT
- */
-(function () {
+/*global module, exports */
+(function (root) {
     "use strict";
-    // Variables
-    var iterator, len, root = this,
-        geohash = {},
-        base32Map = {},
-        base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-    for (iterator = 0, len = base32.length; iterator < len; iterator += 1) {
-        base32Map[base32[iterator]] = iterator;
-    }
-    // Functions for encode
-    function encodeI2C(lat, lon, latLen, lonLen) {
-        var a, b, c, boost = [0, 1, 4, 5, 16, 17, 20, 21],
-            ret = "",
-            base32Arr = base32.split(""),
-            precision = (latLen + lonLen) / 5;
-        if (latLen < lonLen) {
-            a = lon;
+
+    var geohash = root.geohash || {},
+        geo_base32 = "0123456789bcdefghjkmnpqrstuvwxyz",
+        geo_base32_map = {
+            0: 0,
+            1: 1,
+            2: 2,
+            3: 3,
+            4: 4,
+            5: 5,
+            6: 6,
+            7: 7,
+            8: 8,
+            9: 9,
+            b: 10,
+            c: 11,
+            d: 12,
+            e: 13,
+            f: 14,
+            g: 15,
+            h: 16,
+            j: 17,
+            k: 18,
+            m: 19,
+            n: 20,
+            p: 21,
+            q: 22,
+            r: 23,
+            s: 24,
+            t: 25,
+            u: 26,
+            v: 27,
+            w: 28,
+            x: 29,
+            y: 30,
+            z: 31
+        };
+
+
+    /**
+     * encode_i2c Private function
+     * @param  {Number} lat        Latitude
+     * @param  {Number} lng        Longitude
+     * @param  {Number} lat_length Latitude length
+     * @param  {Number} lng_length Longitude length
+     * @return {String} Calced string
+     */
+    function encode_i2c(lat, lng, lat_length, lng_length) {
+        var a, b, t, i, base32 = geo_base32.split(''),
+            precision = (lat_length + lng_length) / 5,
+            boost = [0, 1, 4, 5, 16, 17, 20, 21],
+            ret = "";
+        if (lat_length < lng_length) {
+            a = lng;
             b = lat;
         } else {
             a = lat;
-            b = lon;
+            b = lng;
         }
-        for (iterator = 0; iterator < precision; iterator += 1) {
-            ret += base32Arr[(boost[a & 7] + (boost[b & 3] << 1)) & 0x1F];
-            c = parseInt(a * Math.pow(2, -3), 10);
-            a = parseInt(b * Math.pow(2, -2), 10);
-            b = c;
+        boost = [0, 1, 4, 5, 16, 17, 20, 21];
+        ret = "";
+
+        for (i = 0; i < precision; i += 1) {
+            ret += base32[(boost[a & 7] + (boost[b & 3] << 1)) & 0x1F];
+            t = parseInt((a * Math.pow(2, -3)), 10);
+            a = parseInt((b * Math.pow(2, -2)), 10);
+            b = t;
         }
-        return ret.split("").reverse().join("");
+        return ret.split('').reverse().join('');
     }
-    function encode(lat, lon, precision) {
-        if (lat >= 90 || lat < -90) {
+
+
+    /**
+     * decode_c2i Private function
+     * @param  {String} hashcode Calced GeoHash
+     * @return {Array} Latitude, Longitude, Latitude length, Longitude length
+     */
+    function decode_c2i(hashcode) {
+        var i, t, lng = 0,
+            lat = 0,
+            bit_length = 0,
+            lat_length = 0,
+            lng_length = 0,
+            hash = hashcode.split('');
+
+        for (i = 0; i < hash.length; i += 1) {
+            t = geo_base32_map[hash[i]];
+            if (bit_length % 2 === 0) {
+                lng = lng * 8;
+                lat = lat * 4;
+                lng += (t / 4) & 4;
+                lat += (t / 4) & 2;
+                lng += (t / 2) & 2;
+                lat += (t / 2) & 1;
+                lng += t & 1;
+                lng_length += 3;
+                lat_length += 2;
+            } else {
+                lng = lng * 4;
+                lat = lat * 8;
+                lat += (t / 4) & 4;
+                lng += (t / 4) & 2;
+                lat += (t / 2) & 2;
+                lng += (t / 2) & 1;
+                lat += t & 1;
+                lng_length += 2;
+                lat_length += 3;
+            }
+            bit_length += 5;
+        }
+        return [lat, lng, lat_length, lng_length];
+    }
+
+
+    /**
+     * encode method
+     * @param  {Number} lat       Latitude
+     * @param  {Number} lng       Longitude
+     * @param  {Number} precision Needs precision
+     * @return {String} Calced GeoHash
+     */
+    geohash.encode = function (lat, lng, precision) {
+        precision = precision || 12;
+        if (lat >= 90 || lat <= -90) {
             return "";
         }
-        precision = precision || 12;
-        var xprecision = precision + 1,
-            latLen = parseInt((xprecision * 5 / 2), 10),
-            lonLen = parseInt((xprecision * 5 / 2), 10);
-        if (xprecision % 2 === 1) {
-            lonLen += 1;
+        while (lng < -180.0) {
+            lng += 360.0;
         }
-        while (lon < -180.0) {
-            lon += 360;
-        }
-        while (lon >= 180.0) {
-            lon -= 360;
+        while (lng >= 180.0) {
+            lng -= 360.0;
         }
         lat = lat / 180.0;
-        lon = lon / 360.0;
+        lng = lng / 360.0;
+
+        var xprecision = precision + 1,
+            lat_length = parseInt((xprecision * 5 / 2), 10),
+            lng_length = parseInt((xprecision * 5 / 2), 10);
+
+        if (xprecision % 2 === 1) {
+            lng_length += 1;
+        }
+
         if (lat > 0) {
-            lat = parseInt(Math.pow(2, latLen) * lat + Math.pow(2, latLen - 1), 10);
+            lat = parseInt((Math.pow(2, lat_length) * lat + Math.pow(2, lat_length - 1)), 10);
         } else {
-            lat = Math.pow(2, latLen - 1) - parseInt(Math.pow(2, latLen) * (-1.0 * lat), 10);
+            lat = Math.pow(2, lat_length - 1) - parseInt((Math.pow(2, lat_length) * (-1.0 * lat)), 10);
         }
-        if (lon > 0) {
-            lon = parseInt(Math.pow(2, lonLen) * lon + Math.pow(2, lonLen - 1), 10);
+
+        if (lng > 0) {
+            lng = parseInt((Math.pow(2, lng_length) * lng + Math.pow(2, lng_length - 1)), 10);
         } else {
-            lon = Math.pow(2, lonLen - 1) - parseInt(Math.pow(2, lonLen) * (-1.0 * lon), 10);
+            lng = Math.pow(2, lng_length - 1) - parseInt((Math.pow(2, lng_length) * (-1.0 * lng)), 10);
         }
-        return encodeI2C(lat, lon, latLen, lonLen).substring(0, precision);
-    }
-    // Functions for decode
-    function decodeC2I(hashcode) {
-        var a, lon = 0,
-            lat = 0,
-            bitLen = 0,
-            latLen = 0,
-            lonLen = 0,
-            hash = hashcode.split("");
-        for (iterator = 0, len = hash.length; iterator < len; iterator += 1) {
-            a = base32Map[hash[iterator]];
-            if (bitLen % 2 === 0) {
-                lon = lon * 8;
-                lat = lat * 4;
-                lon += (a / 4) & 4;
-                lat += (a / 4) & 2;
-                lon += (a / 2) & 2;
-                lat += (a / 2) & 1;
-                lon += a & 1;
-                lonLen += 3;
-                latLen += 2;
-            } else {
-                lon = lon * 4;
-                lat = lat * 8;
-                lat += (a / 4) & 4;
-                lon += (a / 4) & 2;
-                lat += (a / 2) & 2;
-                lon += (a / 2) & 1;
-                lat += a & 1;
-                lonLen += 2;
-                latLen += 3;
-            }
-            bitLen += 5;
-        }
-        return [lat, lon, latLen, lonLen];
-    }
-    function decode(hashcode, delta) {
+
+        return encode_i2c(lat, lng, lat_length, lng_length).substring(0, precision);
+    };
+
+
+    /**
+     * decode method
+     * @param  {String}  hashcode Calced GeoHash
+     * @param  {Boolean} delta    Delta flag
+     * @return {Array} Latitude, Longitude
+     */
+    geohash.decode = function (hashcode, delta) {
         delta = delta || false;
-        var calcedLat, calcedLon, deltaLat, deltaLon, decodeData = decodeC2I(hashcode),
-            lat = decodeData[0],
-            lon = decodeData[1],
-            latLen = decodeData[2] + 1,
-            lonLen = decodeData[3] + 1;
+        var data, lat, lng, lat_length, lng_length, latitude, longitude, latitude_delta, longitude_delta;
+        data = decode_c2i(hashcode);
+        lat = data[0];
+        lng = data[1];
+        lat_length = data[2];
+        lng_length = data[3];
+
         lat = (lat * 2) + 1;
-        lon = (lon * 2) + 1;
-        calcedLat = 180.0 * (lat - Math.pow(2, (latLen - 1))) / Math.pow(2, latLen);
-        calcedLon = 360.0 * (lon - Math.pow(2, (lonLen - 1))) / Math.pow(2, lonLen);
+        lng = (lng * 2) + 1;
+        lat_length += 1;
+        lng_length += 1;
+
+        latitude = 180.0 * (lat - Math.pow(2, (lat_length - 1))) / Math.pow(2, lat_length);
+        longitude = 360.0 * (lng - Math.pow(2, (lng_length - 1))) / Math.pow(2, lng_length);
         if (delta) {
-            deltaLat = 180.0 / Math.pow(2, latLen);
-            deltaLon = 360.0 / Math.pow(2, lonLen);
-            return [calcedLat, calcedLon, deltaLat, deltaLon];
+            latitude_delta = 180.0 / Math.pow(2, lat_length);
+            longitude_delta = 360.0 / Math.pow(2, lng_length);
+            return [latitude, longitude, latitude_delta, longitude_delta];
         }
-        return [calcedLat, calcedLon];
-    }
-    function decodeExactly(hashcode) {
-        return decode(hashcode, true);
-    }
-    // Functions for others
-    function bbox(hashcode) {
-        var decodeData = decodeC2I(hashcode),
-            lat = decodeData[0],
-            lon = decodeData[1],
-            latLen = decodeData[2],
-            lonLen = decodeData[3],
+        return [latitude, longitude];
+    };
+
+
+    /**
+     * decode_exactly method (Enable Delta flag)
+     * @param  {String} hashcode Calced GeoHash
+     * @return {Array} Latitude, Longitude
+     */
+    geohash.decode_exactly = function (hashcode) {
+        return geohash.decode(hashcode, true);
+    };
+
+
+    /**
+     * bbox method
+     * @param  {String} hashcode Calced GeoHash
+     * @return {Object} Norce, South, East, West
+     */
+    geohash.bbox = function (hashcode) {
+        var data = decode_c2i(hashcode),
+            lat = data[0],
+            lng = data[1],
+            lat_length = data[2],
+            lng_length = data[3],
             ret = {};
-        if (latLen) {
-            ret.north = 180.0 * (lat + 1 - Math.pow(2, (latLen - 1))) / Math.pow(2, latLen);
-            ret.south = 180.0 * (lat - Math.pow(2, (latLen - 1))) / Math.pow(2, latLen);
+
+        if (lat_length) {
+            ret.n = 180.0 * (lat + 1 - Math.pow(2, (lat_length - 1))) / Math.pow(2, lat_length);
+            ret.s = 180.0 * (lat - Math.pow(2, (lat_length - 1))) / Math.pow(2, lat_length);
         } else {
-            ret.north = 90.0;
-            ret.south = -90.0;
+            ret.n = 90.0;
+            ret.s = -90.0;
         }
-        if (lonLen) {
-            ret.east = 360.0 * (lon + 1 - Math.pow(2, (lonLen - 1))) / Math.pow(2, lonLen);
-            ret.west = 360.0 * (lon - Math.pow(2, (lonLen - 1))) / Math.pow(2, lonLen);
+        if (lng_length) {
+            ret.e = 360.0 * (lng + 1 - Math.pow(2, (lng_length - 1))) / Math.pow(2, lng_length);
+            ret.w = 360.0 * (lng - Math.pow(2, (lng_length - 1))) / Math.pow(2, lng_length);
         } else {
-            ret.east = 180.0;
-            ret.west = -180.0;
+            ret.e = 180.0;
+            ret.w = -180.0;
+        }
+
+        return ret;
+    };
+
+
+    /**
+     * neignbors method
+     * @param  {String} hashcode Calced GeoHash
+     * @return {Array} Calced near 8 points GeoHash
+     */
+    geohash.neighbors = function (hashcode) {
+        var data = decode_c2i(hashcode),
+            lat = data[0],
+            lng = data[1],
+            lat_length = data[2],
+            lng_length = data[3],
+            ret = [],
+            tlat = lat,
+            tlng = lng;
+
+        ret.push(encode_i2c(tlat, tlng - 1, lat_length, lng_length));
+        ret.push(encode_i2c(tlat, tlng + 1, lat_length, lng_length));
+
+        tlat = lat + 1;
+        if (tlat >= 0) {
+            ret.push(encode_i2c(tlat, tlng - 1, lat_length, lng_length));
+            ret.push(encode_i2c(tlat, tlng, lat_length, lng_length));
+            ret.push(encode_i2c(tlat, tlng + 1, lat_length, lng_length));
+        }
+        tlat = lat - 1;
+        if ((tlat / Math.pow(2, lat_length)) !== 0) {
+            ret.push(encode_i2c(tlat, tlng - 1, lat_length, lng_length));
+            ret.push(encode_i2c(tlat, tlng, lat_length, lng_length));
+            ret.push(encode_i2c(tlat, tlng + 1, lat_length, lng_length));
         }
         return ret;
-    }
-    function neighbors(hashcode) {
-        var decodeData = decodeC2I(hashcode),
-            lat = decodeData[0],
-            lon = decodeData[1],
-            latLen = decodeData[2],
-            lonLen = decodeData[3],
-            calcLat = lat,
-            calcLon = lon,
-            ret = [];
+    };
 
-        ret.push(encodeI2C(calcLat, calcLon - 1, latLen, lonLen));
-        ret.push(encodeI2C(calcLat, calcLon + 1, latLen, lonLen));
 
-        calcLat = lat + 1;
-        if (calcLat >= 0) {
-            ret.push(encodeI2C(calcLat, calcLon - 1, latLen, lonLen));
-            ret.push(encodeI2C(calcLat, calcLon, latLen, lonLen));
-            ret.push(encodeI2C(calcLat, calcLon + 1, latLen, lonLen));
-        }
-        calcLat = lat - 1;
-        if ((calcLat / Math.pow(2, latLen)) !== 0) {
-            ret.push(encodeI2C(calcLat, calcLon - 1, latLen, lonLen));
-            ret.push(encodeI2C(calcLat, calcLon, latLen, lonLen));
-            ret.push(encodeI2C(calcLat, calcLon + 1, latLen, lonLen));
-        }
-        return ret;
-    }
-    function expand(hashcode) {
-        var ret = neighbors(hashcode);
+    /**
+     * expand method (Neighbor GeoHashes with self)
+     * @param  {String} hashcode Calced GeoHash
+     * @return {Array} Calced near 8 points GeoHash with argument geohash
+     */
+    geohash.expand = function (hashcode) {
+        var ret = geohash.neighbors(hashcode);
         ret.push(hashcode);
         return ret;
-    }
-    function contain(lat, lon, hashcode) {
-        var decodeData = bbox(hashcode);
-        if (lat < decodeData.north && lat > decodeData.south && lon > decodeData.west && lon < decodeData.east) {
+    };
+
+
+    /**
+     * contain method
+     * @param  {Number}  lat      Latitude
+     * @param  {Number}  lng      Longitude
+     * @param  {String}  hashcode Calced GeoHash
+     * @return {Boolean}
+     */
+    geohash.contain = function (lat, lng, hashcode) {
+        var data = geohash.bbox(hashcode);
+        if (lat < data.n && lat > data.s && lng > data.w && lng < data.e) {
             return true;
         }
         return false;
-    }
-    function containExpand(lat, lon, hashcode) {
-        var decodeData = expand(hashcode);
-        for (iterator = 0, len = decodeData.length; iterator < len; iterator += 1) {
-            if (contain(lat, lon, decodeData[iterator])) {
+    };
+
+
+    /**
+     * contain_expand method
+     * @param  {Number}  lat      Latitude
+     * @param  {Number}  lng      Longitude
+     * @param  {String}  hashcode Calced GeoHash
+     * @return {Boolean}
+     */
+    geohash.contain_expand = function (lat, lng, hashcode) {
+        var i, data = geohash.expand(hashcode);
+        for (i = 0; i < data.length; i += 1) {
+            if (geohash.contain(lat, lng, data[i])) {
                 return true;
             }
         }
         return false;
-    }
-    // Public functions
-    geohash = {
-        encode: encode,
-        decode: decode,
-        decodeExactly: decodeExactly,
-        bbox: bbox,
-        expand: expand,
-        neighbors: neighbors,
-        contain: contain,
-        containExpand: containExpand
     };
+
+
+    // Exports geohash module methods
     if (typeof exports !== "undefined") {
+        if (typeof module !== "undefined" && module.exports) {
+            module.exports = geohash;
+        }
         exports.geohash = geohash;
     } else {
-        if (window && typeof window === "object") {
-            window.geohash = geohash;
-        }
+        root.geohash = geohash;
     }
-}());
+}(this));
